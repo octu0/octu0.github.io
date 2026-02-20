@@ -5,11 +5,11 @@
 // `swift package bridge-js`.
 
 export type Exports = {
-    encodeOne(data: any, width: number, height: number, bitrate: number): any;
-    decodeOne(data: any): any;
-    encode(data: any, width: number, height: number, bitrate: number): any;
-    decode(data: any): any;
-    decodeUpTo(data: any, maxLayer: number): any;
+    encodeOne(data: any, width: number, height: number, bitrate: number, onSuccess: any, onError: any): void;
+    decodeOne(data: any, onSuccess: any, onError: any): void;
+    encode(data: any, width: number, height: number, bitrate: number, onSuccess: any, onError: any): void;
+    decode(data: any, onSuccess: any, onError: any): void;
+    decodeUpTo(data: any, maxLayer: number, onSuccess: any, onError: any): void;
 }
 export type Imports = {
 }

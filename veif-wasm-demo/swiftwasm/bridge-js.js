@@ -29,6 +29,95 @@ export async function createInstantiator(options, swift) {
 
     let _exports = null;
     let bjs = null;
+    function __bjs_jsValueLower(value) {
+        let kind;
+        let payload1;
+        let payload2;
+        if (value === null) {
+            kind = 4;
+            payload1 = 0;
+            payload2 = 0;
+        } else {
+            switch (typeof value) {
+                case "boolean":
+                    kind = 0;
+                    payload1 = value ? 1 : 0;
+                    payload2 = 0;
+                    break;
+                case "number":
+                    kind = 2;
+                    payload1 = 0;
+                    payload2 = value;
+                    break;
+                case "string":
+                    kind = 1;
+                    payload1 = swift.memory.retain(value);
+                    payload2 = 0;
+                    break;
+                case "undefined":
+                    kind = 5;
+                    payload1 = 0;
+                    payload2 = 0;
+                    break;
+                case "object":
+                    kind = 3;
+                    payload1 = swift.memory.retain(value);
+                    payload2 = 0;
+                    break;
+                case "function":
+                    kind = 3;
+                    payload1 = swift.memory.retain(value);
+                    payload2 = 0;
+                    break;
+                case "symbol":
+                    kind = 7;
+                    payload1 = swift.memory.retain(value);
+                    payload2 = 0;
+                    break;
+                case "bigint":
+                    kind = 8;
+                    payload1 = swift.memory.retain(value);
+                    payload2 = 0;
+                    break;
+                default:
+                    throw new TypeError("Unsupported JSValue type");
+            }
+        }
+        return [kind, payload1, payload2];
+    }
+    function __bjs_jsValueLift(kind, payload1, payload2) {
+        let jsValue;
+        switch (kind) {
+            case 0:
+                jsValue = payload1 !== 0;
+                break;
+            case 1:
+                jsValue = swift.memory.getObject(payload1);
+                break;
+            case 2:
+                jsValue = payload2;
+                break;
+            case 3:
+                jsValue = swift.memory.getObject(payload1);
+                break;
+            case 4:
+                jsValue = null;
+                break;
+            case 5:
+                jsValue = undefined;
+                break;
+            case 7:
+                jsValue = swift.memory.getObject(payload1);
+                break;
+            case 8:
+                jsValue = swift.memory.getObject(payload1);
+                break;
+            default:
+                throw new TypeError("Unsupported JSValue kind " + kind);
+        }
+        return jsValue;
+    }
+
 
     return {
         /**
@@ -208,35 +297,25 @@ export async function createInstantiator(options, swift) {
         createExports: (instance) => {
             const js = swift.memory.heap;
             const exports = {
-                encodeOne: function bjs_encodeOne(data, width, height, bitrate) {
-                    const ret = instance.exports.bjs_encodeOne(swift.memory.retain(data), width, height, bitrate);
-                    const ret1 = swift.memory.getObject(ret);
-                    swift.memory.release(ret);
-                    return ret1;
+                encodeOne: function bjs_encodeOne(data, width, height, bitrate, onSuccess, onError) {
+                    const [dataKind, dataPayload1, dataPayload2] = __bjs_jsValueLower(data);
+                    instance.exports.bjs_encodeOne(dataKind, dataPayload1, dataPayload2, width, height, bitrate, swift.memory.retain(onSuccess), swift.memory.retain(onError));
                 },
-                decodeOne: function bjs_decodeOne(data) {
-                    const ret = instance.exports.bjs_decodeOne(swift.memory.retain(data));
-                    const ret1 = swift.memory.getObject(ret);
-                    swift.memory.release(ret);
-                    return ret1;
+                decodeOne: function bjs_decodeOne(data, onSuccess, onError) {
+                    const [dataKind, dataPayload1, dataPayload2] = __bjs_jsValueLower(data);
+                    instance.exports.bjs_decodeOne(dataKind, dataPayload1, dataPayload2, swift.memory.retain(onSuccess), swift.memory.retain(onError));
                 },
-                encode: function bjs_encode(data, width, height, bitrate) {
-                    const ret = instance.exports.bjs_encode(swift.memory.retain(data), width, height, bitrate);
-                    const ret1 = swift.memory.getObject(ret);
-                    swift.memory.release(ret);
-                    return ret1;
+                encode: function bjs_encode(data, width, height, bitrate, onSuccess, onError) {
+                    const [dataKind, dataPayload1, dataPayload2] = __bjs_jsValueLower(data);
+                    instance.exports.bjs_encode(dataKind, dataPayload1, dataPayload2, width, height, bitrate, swift.memory.retain(onSuccess), swift.memory.retain(onError));
                 },
-                decode: function bjs_decode(data) {
-                    const ret = instance.exports.bjs_decode(swift.memory.retain(data));
-                    const ret1 = swift.memory.getObject(ret);
-                    swift.memory.release(ret);
-                    return ret1;
+                decode: function bjs_decode(data, onSuccess, onError) {
+                    const [dataKind, dataPayload1, dataPayload2] = __bjs_jsValueLower(data);
+                    instance.exports.bjs_decode(dataKind, dataPayload1, dataPayload2, swift.memory.retain(onSuccess), swift.memory.retain(onError));
                 },
-                decodeUpTo: function bjs_decodeUpTo(data, maxLayer) {
-                    const ret = instance.exports.bjs_decodeUpTo(swift.memory.retain(data), maxLayer);
-                    const ret1 = swift.memory.getObject(ret);
-                    swift.memory.release(ret);
-                    return ret1;
+                decodeUpTo: function bjs_decodeUpTo(data, maxLayer, onSuccess, onError) {
+                    const [dataKind, dataPayload1, dataPayload2] = __bjs_jsValueLower(data);
+                    instance.exports.bjs_decodeUpTo(dataKind, dataPayload1, dataPayload2, maxLayer, swift.memory.retain(onSuccess), swift.memory.retain(onError));
                 },
             };
             _exports = exports;

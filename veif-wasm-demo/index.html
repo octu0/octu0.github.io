@@ -1,180 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>veif - WASM Demo</title>
     <style>
-        :root {
-            --primary-color: #007AFF;
-            --bg-color: #F5F5F7;
-            --card-bg: #FFFFFF;
-            --text-color: #1D1D1F;
-            --secondary-text: #86868B;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-
-        h1 {
-            font-size: 2.5rem;
-            margin: 0;
-        }
-
-        p.subtitle {
-            color: var(--secondary-text);
-            font-size: 1.1rem;
-            margin-top: 10px;
-        }
-
-        main {
-            width: 100%;
-            max-width: 800px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 24px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        }
-
-        .controls {
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .file-input-wrapper {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-        }
-
-        .btn {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            font-size: 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .btn:hover {
-            background-color: #0056b3;
-        }
-
-        .btn:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        label {
-            font-size: 0.85rem;
-            color: var(--secondary-text);
-            font-weight: 500;
-        }
-
-        input[type="number"] {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            font-size: 1rem;
-            width: 100px;
-        }
-
-        .preview-area {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        @media (max-width: 600px) {
-            .preview-area {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .image-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            background: #f9f9f9;
-            padding: 10px;
-            border-radius: 12px;
-        }
-
-        canvas,
-        img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .stats {
-            font-size: 0.9rem;
-            color: var(--secondary-text);
-            text-align: center;
-        }
-
-        .stats strong {
-            color: var(--text-color);
-        }
-
-        #loading {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            display: none;
-        }
+        :root { --primary-color: #007AFF; --bg-color: #F5F5F7; --card-bg: #FFFFFF; --text-color: #1D1D1F; --secondary-text: #86868B; }
+        body { font-family: -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        header { text-align: center; margin-bottom: 40px; }
+        h1 { font-size: 2.5rem; margin: 0; }
+        p.subtitle { color: var(--secondary-text); font-size: 1.1rem; margin-top: 10px; }
+        main { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 20px; }
+        .card { background: var(--card-bg); border-radius: 16px; padding: 24px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+        .controls { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+        .btn { background-color: var(--primary-color); color: white; border: none; padding: 10px 20px; font-size: 1rem; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+        .btn:hover { background-color: #0056b3; }
+        .btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        .input-group { display: flex; flex-direction: column; gap: 4px; }
+        label { font-size: 0.85rem; color: var(--secondary-text); font-weight: 500; }
+        input[type="number"] { padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; width: 100px; }
+        .preview-area { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+        @media (max-width: 600px) { .preview-area { grid-template-columns: 1fr; } }
+        .image-container { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #f9f9f9; padding: 10px; border-radius: 12px; }
+        canvas, img { max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+        .stats { font-size: 0.9rem; color: var(--secondary-text); text-align: center; }
+        .stats strong { color: var(--text-color); }
+        #loading { position: fixed; top: 20px; right: 20px; background: rgba(0, 0, 0, 0.8); color: white; padding: 10px 20px; border-radius: 20px; font-size: 0.9rem; display: none; }
     </style>
 </head>
-
 <body>
-
     <header>
         <h1>veif</h1>
         <p class="subtitle">Efficient Multi-Resolution Image Format (WASM Demo)</p>
     </header>
-
     <div id="loading">Processing...</div>
-
     <main>
         <div class="card">
             <div class="controls">
@@ -182,65 +41,39 @@
                     <label for="bitrate">Bitrate (kbps)</label>
                     <input type="number" id="bitrate" value="200" min="10" max="5000">
                 </div>
-
                 <div class="input-group">
                     <label>Select PNG Image</label>
                     <input type="file" id="fileInput" accept="image/png">
                 </div>
-
                 <button id="encodeBtn" class="btn" disabled>Encode & Decode</button>
             </div>
         </div>
-
         <div class="card" id="resultCard" style="display: none;">
             <div class="preview-area">
-                <div class="image-container">
-                    <label>Original (PNG)</label>
-                    <img id="originalImg" src="">
-                    <div class="stats" id="originalStats"></div>
-                </div>
-
-                <div class="image-container">
-                    <label>Layer 0 (Small)</label>
-                    <canvas id="canvasL0"></canvas>
-                </div>
-
-                <div class="image-container">
-                    <label>Layer 1 (Medium)</label>
-                    <canvas id="canvasL1"></canvas>
-                </div>
-
-                <div class="image-container">
-                    <label>Layer 2 (Full)</label>
-                    <canvas id="canvasL2"></canvas>
-                </div>
+                <div class="image-container"><label>Original (PNG)</label><img id="originalImg" src=""><div class="stats" id="originalStats"></div></div>
+                <div class="image-container"><label>Layer 0 (Small)</label><canvas id="canvasL0"></canvas></div>
+                <div class="image-container"><label>Layer 1 (Medium)</label><canvas id="canvasL1"></canvas></div>
+                <div class="image-container"><label>Layer 2 (Full)</label><canvas id="canvasL2"></canvas></div>
             </div>
             <div class="stats" id="veifStats" style="text-align: center; margin-top: 20px;"></div>
-
             <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
-
             <div style="text-align: center;">
                 <h3>Progressive Display Demo</h3>
                 <p style="font-size: 0.9rem; color: #666;">Simulates loading layers sequentially (0 -> 1 -> 2)</p>
                 <button id="progressiveBtn" class="btn" disabled>Start Progressive Demo</button>
                 <div class="image-container" style="margin-top: 20px;">
-                    <canvas id="progressiveCanvas"
-                        style="width: 100%; max-width: 600px; height: auto; image-rendering: pixelated;"></canvas>
+                    <canvas id="progressiveCanvas" style="width: 100%; max-width: 600px; height: auto; image-rendering: pixelated;"></canvas>
                     <div class="stats" id="progressiveStats"></div>
                 </div>
             </div>
         </div>
     </main>
-
     <script type="module">
-        import { instantiate } from './swiftwasm/instantiate.js';
-        import { defaultBrowserSetup } from './swiftwasm/platforms/browser.js';
-
-        const options = await defaultBrowserSetup({
-            module: fetch('./swiftwasm/wasm.wasm'),
-        });
+        import { instantiate } from "./swiftwasm/instantiate.js";
+        import { defaultBrowserSetup } from "./swiftwasm/platforms/browser.js";
+        const options = await defaultBrowserSetup({ module: fetch("./swiftwasm/wasm.wasm") });
         const { instance, swift, exports } = await instantiate(options);
-
+        
         let veif = {
             encodeOne: exports.encodeOne,
             decodeOne: exports.decodeOne,
@@ -248,32 +81,33 @@
             decode: exports.decode,
             decodeUpTo: exports.decodeUpTo
         };
-
-        if (veif.encode && veif.decode) {
-            console.log("veif functions loaded:", veif);
-        } else {
-            console.error("veif functions not found in exports. check main.swift @JS exports.");
-            console.log("exports keys:", Object.keys(exports));
-        }
-
         window.veif = veif;
 
+        // Callback Wrappers
+        const encodePromise = (rgbaData, width, height, bitrate) => new Promise((resolve, reject) => {
+            veif.encode(rgbaData, width, height, bitrate, resolve, err => reject(new Error(err)));
+        });
+        const decodePromise = (encodedData) => new Promise((resolve, reject) => {
+            veif.decode(encodedData, resolve, err => reject(new Error(err)));
+        });
+        const decodeUpToPromise = (encodedData, layer) => new Promise((resolve, reject) => {
+            veif.decodeUpTo(encodedData, layer, resolve, err => reject(new Error(err)));
+        });
+
         // UI Logic
-        const fileInput = document.getElementById('fileInput');
-        const encodeBtn = document.getElementById('encodeBtn');
-        const bitrateInput = document.getElementById('bitrate');
-        const resultCard = document.getElementById('resultCard');
-        const originalImg = document.getElementById('originalImg');
-        const originalStats = document.getElementById('originalStats');
-        const veifStats = document.getElementById('veifStats');
-
-        const canvasL0 = document.getElementById('canvasL0');
-        const canvasL1 = document.getElementById('canvasL1');
-        const canvasL2 = document.getElementById('canvasL2');
-
+        const fileInput = document.getElementById("fileInput");
+        const encodeBtn = document.getElementById("encodeBtn");
+        const bitrateInput = document.getElementById("bitrate");
+        const resultCard = document.getElementById("resultCard");
+        const originalImg = document.getElementById("originalImg");
+        const originalStats = document.getElementById("originalStats");
+        const veifStats = document.getElementById("veifStats");
+        const canvasL0 = document.getElementById("canvasL0");
+        const canvasL1 = document.getElementById("canvasL1");
+        const canvasL2 = document.getElementById("canvasL2");
         let currentFile = null;
 
-        fileInput.addEventListener('change', (e) => {
+        fileInput.addEventListener("change", (e) => {
             const file = e.target.files[0];
             if (file) {
                 currentFile = file;
@@ -281,12 +115,8 @@
                 reader.onload = (e) => {
                     originalImg.src = e.target.result;
                     originalStats.textContent = `Size: ${(file.size / 1024).toFixed(2)} KB`;
-                    resultCard.style.display = 'block';
-                    // Clear previous result
-                    [canvasL0, canvasL1, canvasL2].forEach(c => {
-                        const ctx = c.getContext('2d');
-                        ctx.clearRect(0, 0, c.width, c.height);
-                    });
+                    resultCard.style.display = "block";
+                    [canvasL0, canvasL1, canvasL2].forEach(c => c.getContext("2d").clearRect(0, 0, c.width, c.height));
                     veifStats.textContent = "";
                     encodeBtn.disabled = false;
                 };
@@ -294,130 +124,77 @@
             }
         });
 
-        encodeBtn.addEventListener('click', async () => {
-            if (!currentFile || !veif) return console.error("veif not loaded");
-
+        encodeBtn.addEventListener("click", async () => {
+            if (!currentFile || !veif) return;
             const bitrate = parseInt(bitrateInput.value) * 1000;
-            document.getElementById('loading').textContent = 'Processing...';
-            document.getElementById('loading').style.display = 'block';
+            document.getElementById("loading").style.display = "block";
 
             try {
-                // Read file info
-                const arrayBuffer = await currentFile.arrayBuffer();
-
-                // Get image dimensions from img element
                 const width = originalImg.naturalWidth;
                 const height = originalImg.naturalHeight;
+                const tempCanvas = document.createElement("canvas");
+                tempCanvas.width = width; tempCanvas.height = height;
+                const ctx = tempCanvas.getContext("2d");
+                ctx.drawImage(originalImg, 0, 0);
+                const rgbaData = new Uint8Array(ctx.getImageData(0, 0, width, height).data.buffer);
 
                 const startTime = performance.now();
-
-                // 1. Convert PNG to Raw RGBA (using Canvas for simplicity in demo)
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = width;
-                tempCanvas.height = height;
-                const ctx = tempCanvas.getContext('2d');
-                ctx.drawImage(originalImg, 0, 0);
-                const imageData = ctx.getImageData(0, 0, width, height);
-                const rgbaData = new Uint8Array(imageData.data.buffer);
-
-                // 2. Encode
                 console.log(`Encoding... ${width}x${height}, ${bitrate}bps`);
-                const encodedData = await veif.encode(rgbaData, width, height, bitrate);
+                
+                const encodedData = await encodePromise(rgbaData, width, height, bitrate);
                 const encodeTime = performance.now() - startTime;
-
                 console.log(`Encoded size: ${encodedData.length} bytes`);
 
-                // 3. Decode
                 const decodeStart = performance.now();
-                const decodedResult = await veif.decode(encodedData);
+                const decodedResult = await decodePromise(encodedData);
                 const decodeTime = performance.now() - decodeStart;
 
-                console.log("Decoded:", decodedResult);
-
-                // 4. Render Result (3 Layers)
                 const renderLayer = (canvas, layerData) => {
-                    canvas.width = layerData.width;
-                    canvas.height = layerData.height;
-                    const ctx = canvas.getContext('2d');
-                    const imgData = new ImageData(
-                        new Uint8ClampedArray(layerData.data),
-                        layerData.width,
-                        layerData.height
-                    );
-                    ctx.putImageData(imgData, 0, 0);
+                    canvas.width = layerData.width; canvas.height = layerData.height;
+                    canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(layerData.data), layerData.width, layerData.height), 0, 0);
                 };
-
                 renderLayer(canvasL0, decodedResult.layer0);
                 renderLayer(canvasL1, decodedResult.layer1);
                 renderLayer(canvasL2, decodedResult.layer2);
 
-                // Update Stats
-                const kbSize = (encodedData.length / 1024).toFixed(2);
-                const ratio = ((encodedData.length / currentFile.size) * 100).toFixed(1);
-
-                veifStats.innerHTML = `
-                <strong>${kbSize} KB</strong> (${ratio}%)<br>
-                Enc: ${encodeTime.toFixed(1)}ms / Dec: ${decodeTime.toFixed(1)}ms
-                `;
-
+                veifStats.innerHTML = `<strong>${(encodedData.length / 1024).toFixed(2)} KB</strong> (${((encodedData.length / currentFile.size) * 100).toFixed(1)}%)<br>Enc: ${encodeTime.toFixed(1)}ms / Dec: ${decodeTime.toFixed(1)}ms`;
                 progressiveCanvas.style.maxWidth = canvasL2.width + "px";
                 progressiveCanvas.style.maxHeight = canvasL2.height + "px";
-
-                // Enable Progressive Demo Button
                 progressiveBtn.disabled = false;
-                lastEncodedData = encodedData; // Store for progressive demo
-
+                lastEncodedData = encodedData;
             } catch (e) {
-                console.error(e);
-                alert("Error processing image: " + e);
+                console.error(e); alert("Error processing image: " + e);
             } finally {
-                document.getElementById('loading').style.display = 'none';
+                document.getElementById("loading").style.display = "none";
             }
         });
 
-        // Progressive Demo Logic
         let lastEncodedData = null;
-        const progressiveBtn = document.getElementById('progressiveBtn');
-        const progressiveCanvas = document.getElementById('progressiveCanvas');
-        const progressiveStats = document.getElementById('progressiveStats');
+        const progressiveBtn = document.getElementById("progressiveBtn");
+        const progressiveCanvas = document.getElementById("progressiveCanvas");
+        const progressiveStats = document.getElementById("progressiveStats");
 
-        progressiveBtn.addEventListener('click', async () => {
+        progressiveBtn.addEventListener("click", async () => {
             if (!lastEncodedData || !veif) return;
-
             progressiveBtn.disabled = true;
             progressiveStats.textContent = "Starting progressive decode...";
             const sleep = ms => new Promise(r => setTimeout(r, ms));
-
             try {
                 for (let layer = 0; layer <= 2; layer++) {
-                    await sleep(1000); // 1 sec delay
+                    await sleep(1000);
                     progressiveStats.textContent = `Decoding up to Layer ${layer}...`;
-
-                    const result = await veif.decodeUpTo(lastEncodedData, layer);
-
-                    // Render to progressive canvas (scale up using CSS)
-                    progressiveCanvas.width = result.width;
-                    progressiveCanvas.height = result.height;
-                    const ctx = progressiveCanvas.getContext('2d');
-                    const imgData = new ImageData(
-                        new Uint8ClampedArray(result.data),
-                        result.width,
-                        result.height
-                    );
-                    ctx.putImageData(imgData, 0, 0);
-
+                    const result = await decodeUpToPromise(lastEncodedData, layer);
+                    progressiveCanvas.width = result.width; progressiveCanvas.height = result.height;
+                    progressiveCanvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(result.data), result.width, result.height), 0, 0);
                     progressiveStats.textContent = `Displayed Layer ${layer} (${result.width}x${result.height})`;
                 }
                 progressiveStats.textContent += " - Done!";
             } catch (e) {
-                console.error(e);
-                progressiveStats.textContent = "Error: " + e;
+                console.error(e); progressiveStats.textContent = "Error: " + e;
             } finally {
                 progressiveBtn.disabled = false;
             }
         });
     </script>
-
 </body>
-
 </html>
