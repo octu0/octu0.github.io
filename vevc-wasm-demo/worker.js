@@ -36,19 +36,31 @@ onmessage = (e) => {
                 
                 // Immediately feed back to the decoder pipeline
                 if (decoderId !== null) {
-                    wasmExports.decodeChunk(decoderId, chunk);
+                    console.log(`[Worker] Passing chunk to decoder. Length: ${chunk.byteLength}. Total chunks so far: ${stateChunkCount++}`);
+                    try {
+                        const t0 = performance.now();
+                        wasmExports.decodeChunk(decoderId, chunk);
+                        console.log(`[Worker] Decode finished in ${performance.now() - t0}ms`);
+                    } catch (e) {
+                        console.error("[Worker] Error inside decodeChunk:", e);
+                    }
                 }
             });
             
+            let stateChunkCount = 0;
+            let stateFrameCount = 0;
             decoderId = wasmExports.createDecoder((frameObject) => {
+                const arr = new Uint8Array(frameObject.data);
+                const copyBuf = arr.slice().buffer;
+                console.log(`[Worker] Emitting frame from decoder. Total frames emitted so far: ${stateFrameCount++}`);
                 postMessage({
                     type: 'vevc-frame',
                     payload: {
                         width: Number(frameObject.width),
                         height: Number(frameObject.height),
-                        data: new Uint8Array(frameObject.data) // Extract from JSValue
+                        data: copyBuf
                     }
-                });
+                }, [copyBuf]);
             });
         } catch (err) {
             postMessage({ type: 'vevc-error', payload: "Failed to create encoder/decoder: " + err });

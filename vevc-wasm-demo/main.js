@@ -26,13 +26,13 @@ let h264FrameQueue = [];
 let vevcFrameQueue = [];
 let isBuffering = true;
 let presentationTimer = null;
-const BUFFER_TARGET = 60; // 2 seconds at 30 fps
-const BUFFER_MAX = 90; // Stop asking for more frames if we hit 3 seconds
+const BUFFER_TARGET = 5; // Start playback quickly to drain queue
+const BUFFER_MAX = 65; // Must be > 60 (GOP size) to prevent pipeline deadlock!
 let sourcePausedByBackpressure = false;
 const bufferingIndicator = document.getElementById('buffering-indicator');
 
 // Worker setup
-const vevcWorker = new Worker('worker.js?v=2', { type: 'module' });
+const vevcWorker = new Worker('worker.js?v=5', { type: 'module' });
 vevcWorker.onmessage = (e) => {
     const { type, payload } = e.data;
     if (type === 'vevc-ready') {
@@ -44,9 +44,9 @@ vevcWorker.onmessage = (e) => {
         vevcStats.textContent = `Bits: ${vevcTotalBits.toLocaleString()}`;
     } else if (type === 'vevc-frame') {
         const { width, height, data } = payload;
-        const imgData = new ImageData(new Uint8ClampedArray(data), width, height);
-        // Queue it for the presentation loop instead of drawing immediately
-        vevcFrameQueue.push(imgData);
+        // DO NOT allocate ImageData here to prevent 400MB Chrome VRAM spikes
+        // V8 can easily hold 60 raw ArrayBuffers, but Canvas ImageData cannot
+        vevcFrameQueue.push({ width, height, data });
         if (vevcCanvas.width !== width || vevcCanvas.height !== height) {
             vevcCanvas.width = width;
             vevcCanvas.height = height;
@@ -74,6 +74,29 @@ startBtn.addEventListener('click', () => {
 let activePipeline = false;
 let seekTargetTime = -1;
 
+function getH264BaselineCodec(width, height) {
+    // 1マクロブロックは16x16ピクセル
+    const mbs = Math.ceil(width / 16) * Math.ceil(height / 16);
+    let levelHex = "1E"; // 3.0 (default for small videos)
+    
+    if (mbs <= 1620) {
+        levelHex = "1E"; // Level 3.0
+    } else if (mbs <= 3600) {
+        levelHex = "1F"; // Level 3.1
+    } else if (mbs <= 8192) {
+        levelHex = "28"; // Level 4.0
+    } else if (mbs <= 8704) {
+        levelHex = "2A"; // Level 4.2
+    } else if (mbs <= 22080) {
+        levelHex = "32"; // Level 5.0
+    } else {
+        levelHex = "34"; // Level 5.2
+    }
+    
+    // Baseline profile (42), constraint flags (E0) guarantees no B-frames and CAVLC (no CABAC)
+    return `avc1.42E0${levelHex}`;
+}
+
 function initH264Pipeline(width, height, bitrate, framerate) {
     if (h264Canvas.width !== width || h264Canvas.height !== height) {
         h264Canvas.width = width;
@@ -84,8 +107,7 @@ function initH264Pipeline(width, height, bitrate, framerate) {
     try { h264Encoder?.close(); } catch(e){}
     try { h264Decoder?.close(); } catch(e){}
     
-    // avc1.42E01E: Baseline profile, level 3.0
-    const codec = "avc1.42E01E";
+    const codec = getH264BaselineCodec(width, height);
     
     // Create H264 Decoder
     h264Decoder = new VideoDecoder({
@@ -131,9 +153,9 @@ function startComparison() {
     
     // Initialize comparison pipelines when video metadata is loaded
     if (sourceVideo.readyState >= 1) {
-        setupPipelinesAndPlay();
+        setupPipelinesAndPlay(0);
     } else {
-        sourceVideo.onloadedmetadata = setupPipelinesAndPlay;
+        sourceVideo.onloadedmetadata = () => setupPipelinesAndPlay(0);
     }
 }
 
@@ -212,7 +234,7 @@ function setupPipelinesAndPlay(startTime = 0) {
         
         while (t <= dur && activePipeline && seekTargetTime === -1) {
             // Fast backpressure: if buffers are full, yield aggressively to let worker and renderer catch up
-            while ((pendingFrames >= 60 || h264FrameQueue.length > BUFFER_MAX || vevcFrameQueue.length > BUFFER_MAX) && activePipeline && seekTargetTime === -1) {
+            while ((pendingFrames >= 60 || h264FrameQueue.length > BUFFER_MAX || vevcFrameQueue.length > BUFFER_MAX || (h264Encoder && h264Encoder.encodeQueueSize > 15)) && activePipeline && seekTargetTime === -1) {
                 await new Promise(r => setTimeout(r, 20));
             }
             if (!activePipeline || seekTargetTime !== -1) break;
@@ -243,6 +265,11 @@ function setupPipelinesAndPlay(startTime = 0) {
                     payload: { data: imgData.data }
                 }, [imgData.data.buffer]);
                 
+                // Prevent Wasm OOM by pacing message dispatch for high-res frames
+                if (width * height > 500_000) {
+                    await new Promise(r => setTimeout(r, 5));
+                }
+                
             } catch (err) {
                 console.error("Frame extraction error", err);
                 pendingFrames--;
@@ -271,11 +298,13 @@ function setupPipelinesAndPlay(startTime = 0) {
         if (!isBuffering) {
             if (h264FrameQueue.length > 0 && vevcFrameQueue.length > 0) {
                 const h264Frame = h264FrameQueue.shift();
-                const vevcImgData = vevcFrameQueue.shift();
+                const vevcPayload = vevcFrameQueue.shift();
                 
                 h264Ctx.drawImage(h264Frame, 0, 0, width, height);
                 h264Frame.close();
                 
+                // Construct the heavy ImageData exactly at draw-time to bound VRAM!
+                const vevcImgData = new ImageData(new Uint8ClampedArray(vevcPayload.data), vevcPayload.width, vevcPayload.height);
                 vevcCtx.putImageData(vevcImgData, 0, 0);
                 
                 currentPresentationTime += interval;

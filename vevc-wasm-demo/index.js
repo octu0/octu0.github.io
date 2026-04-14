@@ -12,7 +12,7 @@ async function initBrowser(_options) {
     };
     let module = options.module;
     if (!module) {
-        module = fetch(new URL("wasm.wasm", import.meta.url))
+        module = fetch(new URL("wasm.wasm?v=" + Date.now(), import.meta.url))
     }
     const instantiateOptions = await defaultBrowserSetup({
         module,
