@@ -6,10 +6,10 @@
 
 export type Exports = {
     createEncoder(width: number, height: number, maxbitrate: number, framerate: number, onChunk: any): any;
-    encodeFrame(id: number, data: any): void;
+    encodeFrame(id: number, data: any): any;
     closeEncoder(id: number): void;
     createDecoder(onFrame: any): any;
-    decodeChunk(id: number, data: any): void;
+    decodeChunk(id: number, data: any): any;
     closeDecoder(id: number): void;
 }
 export type Imports = {

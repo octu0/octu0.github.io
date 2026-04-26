@@ -3,8 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="VEVC vs H.264 video codec quality comparison demo using WebAssembly">
     <title>VEVC vs H.264 Comparison</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=7">
 </head>
 
 <body>
@@ -13,7 +15,7 @@
     </div>
 
     <div class="controls">
-        <label for="video-upload" class="btn">Upload Video</label>
+        <label for="video-upload" class="btn" id="upload-label">Upload Video</label>
         <input type="file" id="video-upload" accept="video/mp4,video/webm" style="display: none;">
 
         <label for="bitrate-input">Bitrate (kbps): </label>
@@ -23,48 +25,73 @@
         <input type="number" id="framerate-input" value="30">
 
         <button id="start-btn" disabled>Start Comparison</button>
+    </div>
 
-        <div class="seekbar-container"
-            style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 15px; width: 100%;">
-            <span id="time-display">0.00 / 0.00</span>
-            <input type="range" id="seek-bar" min="0" max="100" value="0" step="0.1"
-                style="flex: 1; margin: 0 10px; cursor: pointer;">
+    <div class="playback-controls" id="playback-controls">
+        <button id="play-pause-btn" class="play-pause-btn" disabled title="Play / Pause">
+            <svg id="play-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <polygon points="6,4 20,12 6,20" />
+            </svg>
+            <svg id="pause-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style="display:none;">
+                <rect x="5" y="4" width="4" height="16" />
+                <rect x="15" y="4" width="4" height="16" />
+            </svg>
+        </button>
+        <span id="time-current" class="time-label">0:00</span>
+        <div class="seekbar-wrapper">
+            <input type="range" id="seek-bar" class="seek-bar" min="0" max="1000" value="0" step="1">
+            <div class="seekbar-progress" id="seekbar-progress"></div>
         </div>
+        <span id="time-duration" class="time-label">0:00</span>
     </div>
 
     <!-- Hidden video element for extracting frames -->
     <video id="source-video" playsinline muted style="display: none;"></video>
 
-    <div id="buffering-indicator"
-        style="display: none; text-align: center; background: rgba(255,165,0,0.2); color: orange; font-weight: bold; padding: 10px; margin: 10px auto; width: 50%; border-radius: 5px;">
-        Buffering: Please wait...
+    <div id="buffering-indicator" class="buffering-indicator">
+        <div class="buffering-spinner"></div>
+        <span>Buffering…</span>
     </div>
 
     <div class="comparison-container">
         <div class="panel">
-            <h2>H.264 (WebCodecs)</h2>
+            <h2>H.264 <span class="codec-label">(WebCodecs)</span></h2>
             <canvas id="h264-canvas" width="640" height="360"></canvas>
             <div class="stats" id="h264-stats">Waiting...</div>
         </div>
         <div class="panel">
-            <h2>VEVC (Wasm)</h2>
+            <h2>VEVC <span class="codec-label">(Wasm)</span></h2>
             <canvas id="vevc-canvas" width="640" height="360"></canvas>
             <div class="stats" id="vevc-stats">Waiting...</div>
         </div>
     </div>
 
-    <script src="main.js?v=5"></script>
-    <div id="debug-errors" style="color:red; font-size:20px; font-weight:bold; position:absolute; top:10px; left:10px; z-index:9999; background:white;"></div>
+    <script src="main.js?v=8"></script>
+    <div id="debug-errors" style="color:red; font-size:12px; position:fixed; bottom:10px; left:10px; z-index:9999; background:rgba(0,0,0,0.8); padding:5px; max-width:400px; max-height:100px; overflow:auto; border-radius:4px; display:none;"></div>
     <script>
-        window.onerror = function(msg, url, line) {
-            document.getElementById('debug-errors').innerText += "\n[MAIN ERROR] " + msg;
+        // Filter out non-fatal JavaScriptKit reference lifecycle errors
+        const isKnownNonFatalError = (msg) => {
+            return typeof msg === 'string' && msg.includes('invalid reference');
         };
-        // It will hook into the worker once it's created.
+        window.onerror = function(msg, url, line) {
+            if (isKnownNonFatalError(msg)) return true;
+            const el = document.getElementById('debug-errors');
+            el.style.display = 'block';
+            el.innerText += "\n[MAIN ERROR] " + msg;
+        };
+        window.addEventListener('unhandledrejection', (event) => {
+            const msg = event.reason?.message || String(event.reason);
+            if (isKnownNonFatalError(msg)) { event.preventDefault(); return; }
+        });
         const originalWorker = window.Worker;
         window.Worker = function(scriptURL, options) {
             const w = new originalWorker(scriptURL, options);
             w.addEventListener('error', (err) => {
-                document.getElementById('debug-errors').innerText += "\n[WORKER ERROR] " + (err.message || err);
+                const msg = err.message || String(err);
+                if (isKnownNonFatalError(msg)) return;
+                const el = document.getElementById('debug-errors');
+                el.style.display = 'block';
+                el.innerText += "\n[WORKER ERROR] " + msg;
             });
             return w;
         };

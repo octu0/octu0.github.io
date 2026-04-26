@@ -303,6 +303,11 @@ export async function createInstantiator(options, swift) {
                 encodeFrame: function bjs_encodeFrame(id, data) {
                     const [dataKind, dataPayload1, dataPayload2] = __bjs_jsValueLower(data);
                     instance.exports.bjs_encodeFrame(id, dataKind, dataPayload1, dataPayload2);
+                    const jsValuePayload2 = f64Stack.pop();
+                    const jsValuePayload1 = i32Stack.pop();
+                    const jsValueKind = i32Stack.pop();
+                    const jsValue = __bjs_jsValueLift(jsValueKind, jsValuePayload1, jsValuePayload2);
+                    return jsValue;
                 },
                 closeEncoder: function bjs_closeEncoder(id) {
                     instance.exports.bjs_closeEncoder(id);
@@ -318,6 +323,11 @@ export async function createInstantiator(options, swift) {
                 decodeChunk: function bjs_decodeChunk(id, data) {
                     const [dataKind, dataPayload1, dataPayload2] = __bjs_jsValueLower(data);
                     instance.exports.bjs_decodeChunk(id, dataKind, dataPayload1, dataPayload2);
+                    const jsValuePayload2 = f64Stack.pop();
+                    const jsValuePayload1 = i32Stack.pop();
+                    const jsValueKind = i32Stack.pop();
+                    const jsValue = __bjs_jsValueLift(jsValueKind, jsValuePayload1, jsValuePayload2);
+                    return jsValue;
                 },
                 closeDecoder: function bjs_closeDecoder(id) {
                     instance.exports.bjs_closeDecoder(id);
