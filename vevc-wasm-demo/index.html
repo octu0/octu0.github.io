@@ -1,101 +1,510 @@
 <!DOCTYPE html>
-<html lang="ja">
-
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VEVC vs H.264 video codec quality comparison demo using WebAssembly">
-    <title>VEVC vs H.264 Comparison</title>
-    <link rel="stylesheet" href="style.css?v=7">
+  <meta charset="utf-8">
+  <title>VEVC WASM Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #222; color: #eee; margin: 20px; }
+    canvas { background: #000; max-width: 45%; margin: 10px; border: 1px solid #444; }
+    .container { display: flex; flex-direction: column; }
+    .videos { display: flex; flex-direction: row; }
+    .stats { font-family: monospace; font-size: 1.2em; margin-bottom: 20px; }
+    button { font-size: 1.2em; padding: 10px; margin-right: 10px; cursor: pointer; }
+    .inputs { margin-bottom: 20px; }
+    input[type=file] { font-size: 1.2em; padding: 5px; width: 400px; }
+    .playback-controls { margin-bottom: 20px; display: flex; align-items: center; }
+  </style>
 </head>
-
 <body>
-    <div class="header">
-        <h1>Video Codec Comparison</h1>
+  <h1>VEVC WASM</h1>
+  <div class="inputs">
+    <input type="file" id="videoFile" accept="video/mp4" />
+    <button id="startBtn">Start Streaming</button>
+    <button id="stopBtn">Stop</button>
+  </div>
+  <div class="playback-controls">
+    <button id="playPauseBtn" disabled>Pause</button>
+    <input type="range" id="seekBar" min="0" value="0" style="width: 400px;" disabled />
+    <span id="bufferStatus" style="margin-left: 15px; color: #ffeb3b; font-weight: bold; display: none;">Buffering...</span>
+  </div>
+  <div class="stats">
+    <div>Time: <span id="timeStat">0.0</span>s</div>
+    <div>FPS: <span id="fpsStat">0</span></div>
+    <div>Queue: <span id="queueStat">0</span> frames</div>
+    <div>Encoded Frames: <span id="encStat">0</span></div>
+    <div>Decoded Frames: <span id="decStat">0</span></div>
+    <div>JS Heap Size: <span id="heapStat">N/A</span></div>
+  </div>
+  <div class="videos">
+    <div>
+      <h3>Original</h3>
+      <canvas id="canvasIn"></canvas>
     </div>
-
-    <div class="controls">
-        <label for="video-upload" class="btn" id="upload-label">Upload Video</label>
-        <input type="file" id="video-upload" accept="video/mp4,video/webm" style="display: none;">
-
-        <label for="bitrate-input">Bitrate (kbps): </label>
-        <input type="number" id="bitrate-input" value="500" step="100">
-
-        <label for="framerate-input">Framerate: </label>
-        <input type="number" id="framerate-input" value="30">
-
-        <button id="start-btn" disabled>Start Comparison</button>
+    <div>
+      <h3>Decoded</h3>
+      <canvas id="canvasOut"></canvas>
     </div>
+  </div>
+  <div id="log" style="white-space: pre-wrap; font-family: monospace; background: #333; color: #fff; padding: 10px; margin-top: 20px; max-height: 200px; overflow-y: auto;"></div>
 
-    <div class="playback-controls" id="playback-controls">
-        <button id="play-pause-btn" class="play-pause-btn" disabled title="Play / Pause">
-            <svg id="play-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                <polygon points="6,4 20,12 6,20" />
-            </svg>
-            <svg id="pause-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style="display:none;">
-                <rect x="5" y="4" width="4" height="16" />
-                <rect x="15" y="4" width="4" height="16" />
-            </svg>
-        </button>
-        <span id="time-current" class="time-label">0:00</span>
-        <div class="seekbar-wrapper">
-            <input type="range" id="seek-bar" class="seek-bar" min="0" max="1000" value="0" step="1">
-            <div class="seekbar-progress" id="seekbar-progress"></div>
-        </div>
-        <span id="time-duration" class="time-label">0:00</span>
-    </div>
+  <script type="module">
+    const logDiv = document.getElementById('log');
+    const origLog = console.log;
+    const origErr = console.error;
+    console.log = function(...args) { origLog(...args); logDiv.innerHTML += args.join(' ') + '<br/>'; };
+    console.error = function(...args) { origErr(...args); logDiv.innerHTML += '<span style="color:red">' + args.join(' ') + '</span><br/>'; };
 
-    <!-- Hidden video element for extracting frames -->
-    <video id="source-video" playsinline muted style="display: none;"></video>
+    import { init } from './wasm/index.js?v=1';
+    
+    let wasmContext;
+    let createEncoder, encodeFrame, closeEncoder;
+    let createDecoder, decodeChunk, closeDecoder;
 
-    <div id="buffering-indicator" class="buffering-indicator">
-        <div class="buffering-spinner"></div>
-        <span>Buffering…</span>
-    </div>
+    async function loadWasm() {
+      wasmContext = await init({
+          module: fetch("wasm/wasm.wasm?v=" + new Date().getTime())
+      });
+      const exports = wasmContext.exports;
+      createEncoder = exports.createEncoder || window.createEncoder;
+      encodeFrame = exports.encodeFrame || window.encodeFrame;
+      closeEncoder = exports.closeEncoder || window.closeEncoder;
+      
+      createDecoder = exports.createDecoder || window.createDecoder;
+      decodeChunk = exports.decodeChunk || window.decodeChunk;
+      closeDecoder = exports.closeDecoder || window.closeDecoder;
+      console.log("WASM loaded");
+    }
 
-    <div class="comparison-container">
-        <div class="panel">
-            <h2>H.264 <span class="codec-label">(WebCodecs)</span></h2>
-            <canvas id="h264-canvas" width="640" height="360"></canvas>
-            <div class="stats" id="h264-stats">Waiting...</div>
-        </div>
-        <div class="panel">
-            <h2>VEVC <span class="codec-label">(Wasm)</span></h2>
-            <canvas id="vevc-canvas" width="640" height="360"></canvas>
-            <div class="stats" id="vevc-stats">Waiting...</div>
-        </div>
-    </div>
+    const canvasIn = document.getElementById('canvasIn');
+    const canvasOut = document.getElementById('canvasOut');
+    const ctxIn = canvasIn.getContext('2d', { willReadFrequently: true });
+    const ctxOut = canvasOut.getContext('2d');
 
-    <script src="main.js?v=8"></script>
-    <div id="debug-errors" style="color:red; font-size:12px; position:fixed; bottom:10px; left:10px; z-index:9999; background:rgba(0,0,0,0.8); padding:5px; max-width:400px; max-height:100px; overflow:auto; border-radius:4px; display:none;"></div>
-    <script>
-        // Filter out non-fatal JavaScriptKit reference lifecycle errors
-        const isKnownNonFatalError = (msg) => {
-            return typeof msg === 'string' && msg.includes('invalid reference');
-        };
-        window.onerror = function(msg, url, line) {
-            if (isKnownNonFatalError(msg)) return true;
-            const el = document.getElementById('debug-errors');
-            el.style.display = 'block';
-            el.innerText += "\n[MAIN ERROR] " + msg;
-        };
-        window.addEventListener('unhandledrejection', (event) => {
-            const msg = event.reason?.message || String(event.reason);
-            if (isKnownNonFatalError(msg)) { event.preventDefault(); return; }
+    const fileInput = document.getElementById('videoFile');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const seekBar = document.getElementById('seekBar');
+    const bufferStatus = document.getElementById('bufferStatus');
+    
+    // Global State
+    let isRunning = false;
+    let statsInterval = null;
+    let startTime = 0;
+    
+    let allSamples = [];
+    let videoConfig = null;
+    let videoWidth = 0;
+    let videoHeight = 0;
+    
+    // Streaming State
+    let streamingQueue = [];
+    const MAX_QUEUE = 150;   // 最大5秒分キューに保持
+    const TARGET_QUEUE = 60; // 2秒分溜まるまでBufferingで待機
+    
+    let encodeIndex = 0;
+    let encCount = 0;
+    
+    let playIndex = 0;
+    let decCount = 0;
+    let playStartTime = 0;
+    let playbackTimeoutId = null;
+    
+    let isBuffering = true;
+    let isPlaying = true;
+    let seekTargetIndex = -1;
+    let isVevcSeeking = false;
+    let vevcHeaderChunk = null;
+
+    // Render Sync Queues
+    let playRenderInQueue = [];
+    let playRenderOutQueue = [];
+
+    // Decoders / Encoders
+    let encoderWebDecoder = null;
+    let vevcEncoderId = -1;
+    let encCanvas = null;
+    let encCtx = null;
+    
+    let playbackWebDecoder = null;
+    let playbackVevcDecoderId = -1;
+
+    function updateStats() {
+      if (!isRunning) return;
+      document.getElementById('queueStat').innerText = streamingQueue.length;
+      document.getElementById('encStat').innerText = encCount;
+      document.getElementById('decStat').innerText = decCount;
+      
+      const elapsed = playIndex * (1/30);
+      document.getElementById('timeStat').innerText = elapsed.toFixed(1);
+      
+      if (playStartTime > 0 && isPlaying && !isBuffering) {
+          const actualElapsed = (performance.now() - playStartTime) / 1000;
+          document.getElementById('fpsStat').innerText = (playIndex / Math.max(0.1, actualElapsed)).toFixed(1);
+      }
+      
+      if (performance.memory) {
+        const mb = performance.memory.usedJSHeapSize / 1048576;
+        document.getElementById('heapStat').innerText = mb.toFixed(1) + " MB";
+      }
+    }
+
+    // --- ENCODER LOOP (Producer) ---
+    function resetEncoderDecoders() {
+        if (encoderWebDecoder && encoderWebDecoder.state !== "closed") encoderWebDecoder.close();
+        if (vevcEncoderId !== -1) closeEncoder(vevcEncoderId);
+        
+        encoderWebDecoder = new VideoDecoder({
+            output: async (frame) => {
+                if (!encCanvas || encCanvas.width !== frame.displayWidth || encCanvas.height !== frame.displayHeight) {
+                    encCanvas = new OffscreenCanvas(frame.displayWidth, frame.displayHeight);
+                    encCtx = encCanvas.getContext('2d', { willReadFrequently: true });
+                }
+                encCtx.drawImage(frame, 0, 0);
+                const imgData = encCtx.getImageData(0, 0, encCanvas.width, encCanvas.height);
+                
+                const uint8Array = new Uint8Array(imgData.data.buffer, imgData.data.byteOffset, imgData.data.byteLength);
+                await new Promise(resolve => encodeFrame(vevcEncoderId, uint8Array, resolve));
+                frame.close();
+            },
+            error: (e) => console.error("Encoder WebCodecs Error", e)
         });
-        const originalWorker = window.Worker;
-        window.Worker = function(scriptURL, options) {
-            const w = new originalWorker(scriptURL, options);
-            w.addEventListener('error', (err) => {
-                const msg = err.message || String(err);
-                if (isKnownNonFatalError(msg)) return;
-                const el = document.getElementById('debug-errors');
-                el.style.display = 'block';
-                el.innerText += "\n[WORKER ERROR] " + msg;
-            });
-            return w;
-        };
-    </script>
-</body>
+        encoderWebDecoder.configure(videoConfig);
+        
+        vevcEncoderId = createEncoder(videoWidth, videoHeight, 500000, 30, (chunkArray) => {
+            const vevcChunk = new Uint8Array(chunkArray);
+            
+            // Handle Sequence Header separately
+            if (!vevcHeaderChunk) {
+                vevcHeaderChunk = vevcChunk;
+                if (playbackVevcDecoderId !== -1) {
+                    decodeChunk(playbackVevcDecoderId, vevcHeaderChunk, () => {});
+                }
+                return; // Do not increment encCount or pair with frame
+            }
+            
+            const sample = allSamples[encCount];
+            
+            if (seekTargetIndex !== -1 && encCount < seekTargetIndex) {
+                // Fast-forward VEVC decoder to rebuild state (no drawing)
+                isVevcSeeking = true;
+                decodeChunk(playbackVevcDecoderId, vevcChunk, () => {});
+            } else if (seekTargetIndex !== -1 && encCount === seekTargetIndex) {
+                // Reached seek target
+                seekTargetIndex = -1;
+                isVevcSeeking = false;
+                decodeChunk(playbackVevcDecoderId, vevcChunk, () => {});
+            } else {
+                // Normal streaming
+                streamingQueue.push({ sample, vevcChunk });
+            }
+            
+            encCount++;
+        });
+    }
 
+    function feedEncoderLoop() {
+        if (!isRunning) return;
+        
+        if (encodeIndex >= allSamples.length) {
+            setTimeout(feedEncoderLoop, 100);
+            return;
+        }
+        
+        // Backpressure
+        if (streamingQueue.length >= MAX_QUEUE || encoderWebDecoder.decodeQueueSize > 5) {
+            setTimeout(feedEncoderLoop, 10);
+            return;
+        }
+        
+        const sample = allSamples[encodeIndex++];
+        const chunk = new EncodedVideoChunk({
+            type: sample.is_sync ? "key" : "delta",
+            timestamp: sample.cts, // Use CTS for correct presentation order
+            duration: sample.duration,
+            data: sample.data
+        });
+        encoderWebDecoder.decode(chunk);
+        
+        feedEncoderLoop();
+    }
+
+    // --- PLAYBACK LOOP (Consumer) ---
+    function attemptRender() {
+        if (playRenderInQueue.length > 0 && playRenderOutQueue.length > 0) {
+            const frame = playRenderInQueue.shift();
+            const imgData = playRenderOutQueue.shift();
+            
+            ctxIn.drawImage(frame, 0, 0, canvasIn.width, canvasIn.height);
+            ctxOut.putImageData(imgData, 0, 0);
+            
+            frame.close();
+        }
+    }
+
+    function resetPlaybackDecoders() {
+        if (playbackWebDecoder && playbackWebDecoder.state !== "closed") playbackWebDecoder.close();
+        if (playbackVevcDecoderId !== -1) closeDecoder(playbackVevcDecoderId);
+        
+        playRenderInQueue.forEach(f => f.close());
+        playRenderInQueue = [];
+        playRenderOutQueue = [];
+        
+        playbackWebDecoder = new VideoDecoder({
+            output: (frame) => {
+                if (seekTargetIndex !== -1) {
+                    const targetSample = allSamples[seekTargetIndex];
+                    if (frame.timestamp < targetSample.cts) {
+                        frame.close();
+                        return;
+                    } else if (frame.timestamp === targetSample.cts) {
+                        playRenderInQueue.push(frame);
+                        attemptRender();
+                        return;
+                    }
+                }
+                playRenderInQueue.push(frame);
+                attemptRender();
+            },
+            error: (e) => console.error("Playback WebCodecs Error", e)
+        });
+        playbackWebDecoder.configure(videoConfig);
+        
+        playbackVevcDecoderId = createDecoder((frameObj) => {
+            if (isVevcSeeking) return; // Skip drawing during fast-forward
+            
+            decCount++;
+            const fw = frameObj.width;
+            const fh = frameObj.height;
+            const imgData = new ImageData(new Uint8ClampedArray(frameObj.data.buffer, frameObj.data.byteOffset, frameObj.data.length), fw, fh);
+            playRenderOutQueue.push(imgData);
+            attemptRender();
+        });
+
+        // Feed Header chunk immediately if available
+        if (vevcHeaderChunk) {
+            decodeChunk(playbackVevcDecoderId, vevcHeaderChunk, () => {});
+        }
+    }
+
+    function playbackLoop() {
+        if (!isRunning) return;
+        
+        if (isBuffering) {
+            bufferStatus.style.display = "inline";
+            if (streamingQueue.length >= TARGET_QUEUE || encCount >= allSamples.length) {
+                isBuffering = false;
+                bufferStatus.style.display = "none";
+                playStartTime = performance.now() - (playIndex * (1000 / 30));
+            } else {
+                playbackTimeoutId = setTimeout(playbackLoop, 50);
+                return;
+            }
+        }
+        
+        if (!isPlaying) {
+            playbackTimeoutId = setTimeout(playbackLoop, 50);
+            return;
+        }
+        
+        if (streamingQueue.length === 0) {
+            if (encCount < allSamples.length) {
+                isBuffering = true;
+                playbackTimeoutId = setTimeout(playbackLoop, 50);
+                return;
+            } else {
+                // EOF
+                isPlaying = false;
+                playPauseBtn.innerText = "Play";
+                return;
+            }
+        }
+        
+        const item = streamingQueue.shift();
+        
+        // Decode Original (H.264)
+        const chunk = new EncodedVideoChunk({
+            type: item.sample.is_sync ? "key" : "delta",
+            timestamp: item.sample.cts, // Use CTS
+            duration: item.sample.duration,
+            data: item.sample.data
+        });
+        playbackWebDecoder.decode(chunk);
+        
+        // Decode VEVC
+        isVevcSeeking = false;
+        decodeChunk(playbackVevcDecoderId, item.vevcChunk, () => {});
+        
+        seekBar.value = playIndex;
+        playIndex++;
+        
+        const nextTime = playStartTime + (playIndex * (1000 / 30));
+        const delay = Math.max(0, nextTime - performance.now());
+        playbackTimeoutId = setTimeout(playbackLoop, delay);
+    }
+
+    // --- SEEK LOGIC ---
+    function performSeek(target) {
+        clearTimeout(playbackTimeoutId);
+        isPlaying = false;
+        isBuffering = true;
+        
+        let keyIndex = 0;
+        for (let i = target; i >= 0; i--) {
+            if (allSamples[i] && allSamples[i].is_sync) {
+                keyIndex = i;
+                break;
+            }
+        }
+        
+        streamingQueue = [];
+        resetEncoderDecoders();
+        resetPlaybackDecoders();
+        
+        encodeIndex = keyIndex;
+        encCount = keyIndex;
+        playIndex = target + 1; // After seeking, we resume FROM target + 1
+        seekTargetIndex = target;
+        
+        // Feed playbackWebDecoder with H.264 chunks to rebuild state
+        for (let i = keyIndex; i <= target; i++) {
+            const sample = allSamples[i];
+            const chunk = new EncodedVideoChunk({
+                type: sample.is_sync ? "key" : "delta",
+                timestamp: sample.cts, // Use CTS
+                duration: sample.duration,
+                data: sample.data
+            });
+            playbackWebDecoder.decode(chunk);
+        }
+        
+        isPlaying = true;
+        playbackLoop(); // Restart loop
+    }
+
+    // --- EVENT LISTENERS ---
+    playPauseBtn.addEventListener('click', () => {
+        isPlaying = !isPlaying;
+        playPauseBtn.innerText = isPlaying ? "Pause" : "Play";
+        if (isPlaying) {
+            if (playIndex >= allSamples.length) {
+                performSeek(0); // Restart from beginning
+            } else {
+                playStartTime = performance.now() - (playIndex * (1000 / 30));
+            }
+        }
+    });
+
+    seekBar.addEventListener('input', (e) => {
+        const target = parseInt(e.target.value, 10);
+        performSeek(target);
+    });
+
+    async function startProcessing() {
+        if (isRunning) return;
+        if (fileInput.files.length === 0) {
+            alert("Please select an MP4 file.");
+            return;
+        }
+
+        isRunning = true;
+        allSamples = [];
+        streamingQueue = [];
+        playRenderInQueue.forEach(f => f.close());
+        playRenderInQueue = [];
+        playRenderOutQueue = [];
+        vevcHeaderChunk = null;
+        encodeIndex = 0;
+        encCount = 0;
+        playIndex = 0;
+        decCount = 0;
+        seekTargetIndex = -1;
+        isVevcSeeking = false;
+        isBuffering = true;
+        isPlaying = true;
+
+        seekBar.disabled = true;
+        playPauseBtn.disabled = true;
+        seekBar.value = 0;
+        
+        startTime = performance.now();
+        statsInterval = setInterval(updateStats, 1000);
+
+        await loadWasm();
+        
+        const mp4boxfile = MP4Box.createFile();
+
+        mp4boxfile.onReady = (info) => {
+            const videoTrack = info.videoTracks[0];
+            let description = undefined;
+            const track = mp4boxfile.getTrackById(videoTrack.id);
+            if (track.mdia.minf.stbl.stsd.entries[0].avcC) {
+                const avcC = track.mdia.minf.stbl.stsd.entries[0].avcC;
+                const stream = new DataStream(undefined, 0, DataStream.BIG_ENDIAN);
+                avcC.write(stream);
+                description = new Uint8Array(stream.buffer, 8); 
+            }
+            
+            videoWidth = videoTrack.video.width;
+            videoHeight = videoTrack.video.height;
+            canvasIn.width = videoWidth;
+            canvasIn.height = videoHeight;
+            canvasOut.width = videoWidth;
+            canvasOut.height = videoHeight;
+            
+            videoConfig = {
+                codec: videoTrack.codec,
+                codedWidth: videoWidth,
+                codedHeight: videoHeight,
+                description: description
+            };
+            
+            mp4boxfile.setExtractionOptions(videoTrack.id);
+            mp4boxfile.start();
+        };
+
+        mp4boxfile.onSamples = (id, user, samples) => {
+            allSamples.push(...samples);
+            seekBar.max = allSamples.length - 1;
+            seekBar.disabled = false;
+            playPauseBtn.disabled = false;
+        };
+
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const buffer = e.target.result;
+            buffer.fileStart = 0;
+            mp4boxfile.appendBuffer(buffer);
+            mp4boxfile.flush();
+            
+            // Start the pipelines
+            resetEncoderDecoders();
+            resetPlaybackDecoders();
+            feedEncoderLoop();
+            playbackLoop();
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function stopProcessing() {
+        isRunning = false;
+        clearInterval(statsInterval);
+        clearTimeout(playbackTimeoutId);
+        
+        if (encoderWebDecoder && encoderWebDecoder.state !== "closed") encoderWebDecoder.close();
+        if (playbackWebDecoder && playbackWebDecoder.state !== "closed") playbackWebDecoder.close();
+        
+        if (vevcEncoderId !== -1) closeEncoder(vevcEncoderId);
+        if (playbackVevcDecoderId !== -1) closeDecoder(playbackVevcDecoderId);
+        
+        vevcEncoderId = -1;
+        playbackVevcDecoderId = -1;
+    }
+
+    startBtn.addEventListener('click', startProcessing);
+    stopBtn.addEventListener('click', stopProcessing);
+  </script>
+</body>
 </html>
